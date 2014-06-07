@@ -55,12 +55,11 @@ module Data.Type.Natural (-- * Re-exported modules.
 import           Data.Singletons
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
 import Data.Singletons.TH      (singletons)
-import Data.Singletons.Prelude hiding ((:<=), SOrd(..), MaxSym1, MaxSym0, MaxSym2
-                                      , MinSym1, MinSym0, MinSym2, Max, Min)
+import Data.Singletons.Prelude
 #endif
 import           Data.Type.Monomorphic
 import           Prelude          (Int, Bool (..), Eq (..), Integral (..), Ord ((<)),
-                                   Show (..), error, id, otherwise, ($), (.), undefined)
+                                   Show (..), error, id, otherwise, ($), (.))
 import qualified Prelude          as P
 import           Proof.Equational
 import Data.Constraint hiding ((:-))
@@ -79,7 +78,7 @@ singletons [d|
 --------------------------------------------------
 -- ** Arithmetic functions.
 --------------------------------------------------
-
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708
 singletons [d|
  -- | Minimum function.
  min :: Nat -> Nat -> Nat
@@ -95,6 +94,7 @@ singletons [d|
  max (S n) Z     = S n
  max (S n) (S m) = S (max n m)
  |]
+#endif
 
 singletons [d|
  (+) :: Nat -> Nat -> Nat
@@ -210,29 +210,29 @@ sS = SS
 -- ** Type-level predicate & judgements.
 --------------------------------------------------
 -- | Comparison via type-class.
-class (n :: Nat) :<= (m :: Nat)
-instance Z :<= n
-instance (n :<= m) => S n :<= S m
+class (n :: Nat) :<<= (m :: Nat)
+instance Z :<<= n
+instance (n :<<= m) => S n :<<= S m
 
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708
 -- | Boolean-valued type-level comparison function.
 singletons [d|
- (<<=) :: Nat -> Nat -> Bool
- Z   <<= _   = True
- S _ <<= Z   = False
- S n <<= S m = n <<= m
+ (<=) :: Nat -> Nat -> Bool
+ Z   <= _   = True
+ S _ <= Z   = False
+ S n <= S m = n <<= m
  |]
+#endif
 
 -- | Comparison via GADTs.
 data Leq (n :: Nat) (m :: Nat) where
   ZeroLeq     :: SNat m -> Leq Zero m
   SuccLeqSucc :: Leq n m -> Leq (S n) (S m)
 
-type LeqTrueInstance a b = Dict ((a :<<= b) ~ True)
+type LeqTrueInstance a b = Dict ((a :<= b) ~ True)
 
-(%-) :: (n :<<= m) ~ True => SNat n -> SNat m -> SNat (n :-: m)
-n   %- SZ    = n
-SS n %- SS m = n %- m
-_    %- _    = error "impossible!"
+(%-) :: (n :<= m) ~ True => SNat n -> SNat m -> SNat (n :-: m)
+n   %- m    = n %:- m
 
 infixl 6 %-
 deriving instance Show (SNat n)
@@ -251,7 +251,7 @@ propToBoolLeq :: forall n m. Leq n m -> LeqTrueInstance n m
 propToBoolLeq _ = unsafeCoerce (Dict :: Dict ())
 {-# INLINE propToBoolLeq #-}
 
-boolToClassLeq :: (n :<<= m) ~ True => SNat n -> SNat m -> LeqInstance n m
+boolToClassLeq :: (n :<= m) ~ True => SNat n -> SNat m -> LeqInstance n m
 boolToClassLeq _ = unsafeCoerce (Dict :: Dict ())
 {-# INLINE boolToClassLeq #-}
 
@@ -287,9 +287,9 @@ propToClassLeq (SuccLeqSucc leq) = case propToClassLeq leq of Dict -> Dict
  #-}
 -}
 
-type LeqInstance n m = Dict (n :<= m)
+type LeqInstance n m = Dict (n :<<= m)
 
-boolToPropLeq :: (n :<<= m) ~ True => SNat n -> SNat m -> Leq n m
+boolToPropLeq :: (n :<= m) ~ True => SNat n -> SNat m -> Leq n m
 boolToPropLeq SZ     m      = ZeroLeq m
 boolToPropLeq (SS n) (SS m) = SuccLeqSucc $ boolToPropLeq n m
 boolToPropLeq _      _      = bugInGHC
@@ -404,7 +404,7 @@ plusCommutative (SS n) m =
     === m %+ (n %+ sOne) `because` symmetry (plusAssociative m n sOne)
     === m %+ sS n        `because` plusCongL m (symmetry $ sAndPlusOne n)
 
-eqSuccMinus :: ((m :<<= n) ~ True)
+eqSuccMinus :: ((m :<= n) ~ True)
             => SNat n -> SNat m -> (S n :-: m) :=: (S (n :-: m))
 eqSuccMinus _      SZ     = Refl
 eqSuccMinus (SS n) (SS m) =
