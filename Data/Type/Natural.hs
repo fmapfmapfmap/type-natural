@@ -1,9 +1,11 @@
-{-# LANGUAGE CPP, DataKinds, FlexibleContexts, FlexibleInstances, GADTs #-}
-{-# LANGUAGE KindSignatures, MultiParamTypeClasses, NoImplicitPrelude   #-}
-{-# LANGUAGE PolyKinds, RankNTypes, TemplateHaskell, TypeFamilies, ScopedTypeVariables       #-}
-{-# LANGUAGE TypeOperators, UndecidableInstances, StandaloneDeriving    #-}
+{-# LANGUAGE CPP, DataKinds, FlexibleContexts, FlexibleInstances, GADTs     #-}
+{-# LANGUAGE KindSignatures, MultiParamTypeClasses, NoImplicitPrelude       #-}
+{-# LANGUAGE PolyKinds, RankNTypes, ScopedTypeVariables, StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell, TypeFamilies, TypeOperators                   #-}
+{-# LANGUAGE UndecidableInstances                                           #-}
 -- | Type level peano natural number, some arithmetic functions and their singletons.
-module Data.Type.Natural (-- * Re-exported modules.
+module Data.Type.Natural
+       {- (-- * Re-exported modules.
                           module Data.Singletons,
                           -- * Natural Numbers
                           -- | Peano natural numbers. It will be promoted to the type-level natural number.
@@ -51,28 +53,29 @@ module Data.Type.Natural (-- * Re-exported modules.
                           N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, N14, N15, N16, N17, N18, N19, N20,
                           sN0, sN1, sN2, sN3, sN4, sN5, sN6, sN7, sN8, sN9, sN10, sN11, sN12, sN13, sN14,
                           sN15, sN16, sN17, sN18, sN19, sN20
-                         ) where
-import           Data.Singletons
+                         ) -} where
+import Data.Singletons
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
-import Data.Singletons.TH      (singletons)
 import Data.Singletons.Prelude
+import Data.Singletons.TH      (promoteOrdInstance, singEqInstance, singletons)
 #endif
+import           Data.Constraint           hiding ((:-))
 import           Data.Type.Monomorphic
-import           Prelude          (Int, Bool (..), Eq (..), Integral (..), Ord ((<)),
-                                   Show (..), error, id, otherwise, ($), (.))
-import qualified Prelude          as P
+import           Language.Haskell.TH
+import           Language.Haskell.TH.Quote
+import           Prelude                   (Bool (..), Eq (..), Int,
+                                            Integral (..), Ord ((<)), Show (..),
+                                            error, id, otherwise, ($), (.))
+import qualified Prelude                   as P
 import           Proof.Equational
-import Data.Constraint hiding ((:-))
-import Language.Haskell.TH.Quote
-import Unsafe.Coerce
-import Language.Haskell.TH
+import           Unsafe.Coerce
 
 --------------------------------------------------
 -- * Natural numbers and its singleton type
 --------------------------------------------------
 singletons [d|
  data Nat = Z | S Nat
-            deriving (Show, Eq, Ord)
+            deriving (Show, Eq)
  |]
 
 --------------------------------------------------
@@ -94,8 +97,30 @@ singletons [d|
  max (S n) Z     = S n
  max (S n) (S m) = S (max n m)
  |]
+#else
+instance POrd ('KProxy :: KProxy Nat) where
+  type Compare Z Z = P.EQ
+  type Compare Z (S n) = P.LT
+  type Compare (S n) Z = P.GT
+  type Compare (S n) (S m) = ThenCmp P.EQ (Compare n m)
+
+  type n :< m = CaseOrdering (Compare n m) True False False
+
+               {-
+instance SOrd ('KProxy :: KProxy Nat) where
+  sCompare SZ SZ = SEQ
+  sCompare SZ (SS _) = SLT
+  sCompare (SS _) SZ = SGT
+  sCompare (SS n) (SS m) = sThenCmp SEQ (sCompare n m)
+  x %:< y = case sCompare x y of { SLT -> STrue ; SEQ -> SFalse ; SGT -> SFalse }
+  x %:> y = case sCompare x y of { SGT -> STrue ; SEQ -> SFalse ; SLT -> SFalse }
+  x %:<= y = case sCompare x y of { SLT -> STrue ; SEQ -> STrue ; SGT -> SFalse }
+  x %:>= y = case sCompare x y of { SGT -> STrue ; SEQ -> STrue ; SLT -> SFalse }
+  sMin x y = sIf (x %:<= y) x y
+  sMax x y = sIf (x %:<= y) y x -}
 #endif
 
+{-
 singletons [d|
  (+) :: Nat -> Nat -> Nat
  Z   + n = n
@@ -146,8 +171,8 @@ type n :*: m = n :* m
 -- ** Convenient synonyms
 --------------------------------------------------
 singletons [d|
- zero, one, two, three, four, five, six, seven, eight, nine, ten :: Nat           
- eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty :: Nat           
+ zero, one, two, three, four, five, six, seven, eight, nine, ten :: Nat
+ eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty :: Nat
  zero      = Z
  one       = S zero
  two       = S one
@@ -220,7 +245,7 @@ singletons [d|
  (<=) :: Nat -> Nat -> Bool
  Z   <= _   = True
  S _ <= Z   = False
- S n <= S m = n <<= m
+ S n <= S m = n <= m
  |]
 #endif
 
@@ -336,7 +361,7 @@ plusInjectiveR n m l eq = plusInjectiveL l n m $
   start (l %:+ n)
     === n %:+ l   `because` plusCommutative l n
     === m %:+ l   `because` eq
-    === l %:+ m   `because` plusCommutative m l 
+    === l %:+ m   `because` plusCommutative m l
 
 sAndPlusOne :: SNat n -> S n :=: n :+: One
 sAndPlusOne SZ = Refl
@@ -454,7 +479,7 @@ maxZR n = transitivity (maxComm n sZ) (maxZL n)
 
 multPlusDistr :: SNat n -> SNat m -> SNat l -> n :* (m :+ l) :=: n :* m :+ n :* l
 multPlusDistr SZ     _ _ = Refl
-multPlusDistr (SS n) m l = 
+multPlusDistr (SS n) m l =
   start (sS n %* (m %+ l))
     =~= n %* (m %+ l) %+ (m %+ l)
     === (n %* m) %+ (n %* l) %+ (m %+ l) `because` plusCongR (m %+ l) (multPlusDistr n m l)
@@ -632,7 +657,7 @@ leqSnnAbsurd (SuccLeqSucc leq) =
   case leqLhs leq of
     SS _ -> leqSnnAbsurd leq
     _    -> bugInGHC "cannot be occured"
-  
+
 --------------------------------------------------
 -- * Conversion functions.
 --------------------------------------------------
@@ -677,7 +702,7 @@ nat = QuasiQuoter { quoteExp = P.foldr appE (conE 'Z) . P.flip P.replicate (conE
                   }
 
 -- | Quotesi-quoter for 'SNat'. This can be used for an expression, pattern and type.
--- 
+--
 --  For example: @[snat|12|] '%+' [snat| 5 |]@, @'sing' :: [snat| 12 |]@, @f [snat| 12 |] = \"hey\"@
 snat :: QuasiQuoter
 snat = QuasiQuoter { quoteExp = P.foldr appE (conE 'SZ) . P.flip P.replicate (conE 'SS) . P.read
@@ -685,3 +710,4 @@ snat = QuasiQuoter { quoteExp = P.foldr appE (conE 'SZ) . P.flip P.replicate (co
                    , quoteType = appT (conT ''SNat) . P.foldr appT (conT 'Z) . P.flip P.replicate (conT 'S) . P.read
                    , quoteDec = error "not implemented"
                    }
+-}
