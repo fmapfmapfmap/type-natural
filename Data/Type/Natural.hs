@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies, TypeOperators                   #-}
 {-# LANGUAGE UndecidableInstances                                           #-}
 -- | Type level peano natural number, some arithmetic functions and their singletons.
-module Data.Type.Natural
+module Data.Type.Natural {-
                          (-- * Re-exported modules.
                           module Data.Singletons,
                           -- * Natural Numbers
@@ -85,11 +85,10 @@ module Data.Type.Natural
 #endif
                           sN0, sN1, sN2, sN3, sN4, sN5, sN6, sN7, sN8, sN9, sN10, sN11, sN12, sN13, sN14,
                           sN15, sN16, sN17, sN18, sN19, sN20
-                         ) where
+                         ) -} where
 import Data.Singletons
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
-import Data.Singletons.Prelude hiding (Max, sMax, Min, sMin)
-import Data.Singletons.TH      (promoteOrdInstance, singEqInstance, singletons)
+import Data.Singletons.Prelude
 #endif
 import           Data.Constraint           hiding ((:-))
 import           Data.Type.Monomorphic
@@ -105,17 +104,6 @@ import Language.Haskell.TH.Quote
 import Unsafe.Coerce
 import Language.Haskell.TH
 import Data.Type.Natural.Definitions
-
-instance P.Num Nat where
-  n - m = n - m
-  n + m = n + m
-  n * m = n * m
-  abs = id
-  signum Z = Z
-  signum _ = S Z
-  fromInteger 0             = Z
-  fromInteger n | n P.< 0   = error "negative integer"
-                | otherwise = S $ P.fromInteger (n P.- 1)
 
 --------------------------------------------------
 -- ** Convenient synonyms
@@ -142,13 +130,10 @@ instance (n :<<<= m) => S n :<<<= S m
 
 -- | Comparison via GADTs.
 data Leq (n :: Nat) (m :: Nat) where
-  ZeroLeq     :: SNat m -> Leq Zero m
+  ZeroLeq     :: SNat m -> Leq Z m
   SuccLeqSucc :: Leq n m -> Leq (S n) (S m)
 
 type LeqTrueInstance a b = Dict ((a :<= b) ~ True)
-
-deriving instance Show (SNat n)
-deriving instance Eq (SNat n)
 
 data (a :: Nat) :<: (b :: Nat) where
   ZeroLtSucc :: Zero :<: S m
@@ -171,39 +156,45 @@ propToClassLeq :: Leq n m -> LeqInstance n m
 propToClassLeq _ = unsafeCoerce (Dict :: Dict ())
 {-# INLINE propToClassLeq #-}
 
-{-
+
+zLeq :: SNat n -> LeqTrueInstance Z n
+zLeq SZ = Dict
+zLeq (SS _) = Dict
+
+succLeq :: SNat n -> SNat m -> LeqTrueInstance n m -> LeqTrueInstance (S n) (S m)
+succLeq n m Dict =
+  case sCompare n m of
+    SLT -> Dict
+    SEQ -> Dict
+    _ -> bugInGHC
+
+
 -- | Below is the "proof" of the correctness of above:
-propToBoolLeq :: Leq n m -> LeqTrueInstance n m
-propToBoolLeq (ZeroLeq _) = Dict
-propToBoolLeq (SuccLeqSucc leq) = case propToBoolLeq leq of Dict -> Dict
-{-# RULES
- "propToBoolLeq/unsafeCoerce" forall (x :: Leq n m) .
-  propToBoolLeq x = unsafeCoerce (Dict :: Dict ()) :: Dict ((n :<<= m) ~ True)
- #-}
+{-
+propToBoolLeq' :: SNat n -> SNat m -> Leq n m -> LeqTrueInstance n m
+propToBoolLeq' SZ _ (ZeroLeq m) = zLeq m
+propToBoolLeq' (SS n) (SS m) (SuccLeqSucc leq) = succLeq n m $ propToBoolLeq n m leq
+propToBoolLeq' _ _ _ = error "propToBoolLeq"
 
 boolToClassLeq :: (n :<<= m) ~ True => SNat n -> SNat m -> LeqInstance n m
 boolToClassLeq SZ     _      = Dict
 boolToClassLeq (SS n) (SS m) = case boolToClassLeq n m of Dict -> Dict
 boolToClassLeq _ _ = bugInGHC
-{-# RULES
- "boolToClassLeq/unsafeCoerce" forall (n :: SNat n) (m :: SNat m).
-  boolToClassLeq n m = unsafeCoerce (Dict :: Dict ()) :: Dict (n :<= m)
- #-}
 
 propToClassLeq :: Leq n m -> LeqInstance n m
 propToClassLeq (ZeroLeq _) = Dict
 propToClassLeq (SuccLeqSucc leq) = case propToClassLeq leq of Dict -> Dict
-{-# RULES
- "propToClassLeq/unsafeCoerce" forall (x :: Leq n m) .
-  propToClassLeq x = unsafeCoerce (Dict :: Dict ()) :: Dict (n :<= m)
- #-}
 -}
 
 type LeqInstance n m = Dict (n :<<<= m)
 
 boolToPropLeq :: (n :<= m) ~ True => SNat n -> SNat m -> Leq n m
-boolToPropLeq SZ     m      = ZeroLeq m
-boolToPropLeq (SS n) (SS m) = SuccLeqSucc $ boolToPropLeq n m
+boolToPropLeq SZ m = ZeroLeq m
+boolToPropLeq (SS n) (SS m) = SuccLeqSucc $ 
+  case sCompare n m of
+    SLT -> boolToPropLeq n m
+    SEQ -> boolToPropLeq n m
+    _ -> bugInGHC
 boolToPropLeq _      _      = bugInGHC
 
 leqRhs :: Leq n m -> SNat m
@@ -320,10 +311,12 @@ eqSuccMinus :: ((m :<= n) ~ True)
             => SNat n -> SNat m -> (S n :-: m) :=: (S (n :-: m))
 eqSuccMinus _      SZ     = Refl
 eqSuccMinus (SS n) (SS m) =
-  start (sS (sS n) %:- sS m)
-    =~= sS n %:- m
-    === sS (n %:- m)       `because` eqSuccMinus n m
-    =~= sS (sS n %:- sS m)
+  case n %:<= m of
+    STrue -> 
+      start (sS (sS n) %:- sS m)
+        =~= sS n %:- m
+        === sS (n %:- m)       `because` eqSuccMinus n m
+        =~= sS (sS n %:- sS m)
 eqSuccMinus _ _ = bugInGHC
 
 plusMinusEqL :: SNat n -> SNat m -> ((n :+: m) :-: m) :=: n
@@ -597,3 +590,4 @@ snat = QuasiQuoter { quoteExp = P.foldr appE (conE 'SZ) . P.flip P.replicate (co
                    , quoteType = appT (conT ''SNat) . P.foldr appT (conT 'Z) . P.flip P.replicate (conT 'S) . P.read
                    , quoteDec = error "not implemented"
                    }
+
