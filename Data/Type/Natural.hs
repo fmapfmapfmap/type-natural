@@ -104,9 +104,8 @@ instance POrd ('KProxy :: KProxy Nat) where
   type Compare (S n) Z = P.GT
   type Compare (S n) (S m) = ThenCmp P.EQ (Compare n m)
 
-  type n :< m = CaseOrdering (Compare n m) True False False
+--  type n :< m = CaseOrdering (Compare n m) True False False
 
-               {-
 instance SOrd ('KProxy :: KProxy Nat) where
   sCompare SZ SZ = SEQ
   sCompare SZ (SS _) = SLT
@@ -117,7 +116,7 @@ instance SOrd ('KProxy :: KProxy Nat) where
   x %:<= y = case sCompare x y of { SLT -> STrue ; SEQ -> STrue ; SGT -> SFalse }
   x %:>= y = case sCompare x y of { SGT -> STrue ; SEQ -> STrue ; SLT -> SFalse }
   sMin x y = sIf (x %:<= y) x y
-  sMax x y = sIf (x %:<= y) y x -}
+  sMax x y = sIf (x %:<= y) y x
 #endif
 
 {-
