@@ -5,11 +5,14 @@
 {-# LANGUAGE UndecidableInstances                                           #-}
 -- | Type level peano natural number, some arithmetic functions and their singletons.
 module Data.Type.Natural
-       {- (-- * Re-exported modules.
+                         (-- * Re-exported modules.
                           module Data.Singletons,
                           -- * Natural Numbers
                           -- | Peano natural numbers. It will be promoted to the type-level natural number.
                           Nat(..),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          SSym0, SSym1, ZSym0,
+#endif
                           -- | Singleton type for 'Nat'.
                           SNat, Sing (SZ, SS),
                           -- ** Smart constructors
@@ -18,10 +21,29 @@ module Data.Type.Natural
                           sZ, sS,
                           -- ** Arithmetic functions and their singletons.
                           min, Min, sMin, max, Max, sMax,
-                          (:+:), (:+), (%+), (%:+), (:*:), (:*), (%:*), (%*),
-                          (:-:), (:-), (%:-), (%-),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          MinSym0, MinSym1, MinSym2,
+                          MaxSym0, MaxSym1, MaxSym2,
+#endif
+                          (:+:), (:+),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          (:+$), (:+$$), (:+$$$),
+#endif
+                          (%+), (%:+), (:*:),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          (:*), (:*$), (:*$$), (:*$$$),
+#endif
+                          (%:*), (%*), (:-:), (:-),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          (:-$), (:-$$), (:-$$$),
+#endif
+                          (%:-), (%-),
                           -- ** Type-level predicate & judgements
-                          Leq(..), (:<=), (:<<=), (%:<<=), LeqInstance,
+                          Leq(..), (:<=), (:<<=),
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          (:<<=$),(:<<=$$),(:<<=$$$), 
+#endif
+                          (%:<<=), LeqInstance,
                           boolToPropLeq, boolToClassLeq, propToClassLeq,
                           LeqTrueInstance, propToBoolLeq,
                           -- * Conversion functions
@@ -47,16 +69,26 @@ module Data.Type.Natural
                           twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty,
                           Zero, One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten,
                           Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty,
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+                          ZeroSym0, OneSym0, TwoSym0, ThreeSym0, FourSym0, FiveSym0, SixSym0,
+                          SevenSym0, EightSym0, NineSym0, TenSym0, ElevenSym0, TwelveSym0,
+                          ThirteenSym0, FourteenSym0, FifteenSym0, SixteenSym0, SeventeenSym0,
+                          EighteenSym0, NineteenSym0, TwentySym0,
+#endif
                           sZero, sOne, sTwo, sThree, sFour, sFive, sSix, sSeven, sEight, sNine, sTen, sEleven,
                           sTwelve, sThirteen, sFourteen, sFifteen, sSixteen, sSeventeen, sEighteen, sNineteen, sTwenty,
                           n0, n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16, n17, n18, n19, n20,
                           N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, N14, N15, N16, N17, N18, N19, N20,
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+
+                          N0Sym0, N1Sym0, N2Sym0, N3Sym0, N4Sym0, N5Sym0, N6Sym0, N7Sym0, N8Sym0, N9Sym0, N10Sym0, N11Sym0, N12Sym0, N13Sym0, N14Sym0, N15Sym0, N16Sym0, N17Sym0, N18Sym0, N19Sym0, N20Sym0,
+#endif
                           sN0, sN1, sN2, sN3, sN4, sN5, sN6, sN7, sN8, sN9, sN10, sN11, sN12, sN13, sN14,
                           sN15, sN16, sN17, sN18, sN19, sN20
-                         ) -} where
+                         ) where
 import Data.Singletons
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
-import Data.Singletons.Prelude
+import Data.Singletons.Prelude hiding (Max, sMax, Min, sMin)
 import Data.Singletons.TH      (promoteOrdInstance, singEqInstance, singletons)
 #endif
 import           Data.Constraint           hiding ((:-))
@@ -68,72 +100,11 @@ import           Prelude                   (Bool (..), Eq (..), Int,
                                             error, id, otherwise, ($), (.))
 import qualified Prelude                   as P
 import           Proof.Equational
-import           Unsafe.Coerce
-
---------------------------------------------------
--- * Natural numbers and its singleton type
---------------------------------------------------
-singletons [d|
- data Nat = Z | S Nat
-            deriving (Show, Eq)
- |]
-
---------------------------------------------------
--- ** Arithmetic functions.
---------------------------------------------------
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708
-singletons [d|
- -- | Minimum function.
- min :: Nat -> Nat -> Nat
- min Z     Z     = Z
- min Z     (S _) = Z
- min (S _) Z     = Z
- min (S m) (S n) = S (min m n)
-
- -- | Maximum function.
- max :: Nat -> Nat -> Nat
- max Z     Z     = Z
- max Z     (S n) = S n
- max (S n) Z     = S n
- max (S n) (S m) = S (max n m)
- |]
-#else
-instance POrd ('KProxy :: KProxy Nat) where
-  type Compare Z Z = P.EQ
-  type Compare Z (S n) = P.LT
-  type Compare (S n) Z = P.GT
-  type Compare (S n) (S m) = ThenCmp P.EQ (Compare n m)
-
---  type n :< m = CaseOrdering (Compare n m) True False False
-
-instance SOrd ('KProxy :: KProxy Nat) where
-  sCompare SZ SZ = SEQ
-  sCompare SZ (SS _) = SLT
-  sCompare (SS _) SZ = SGT
-  sCompare (SS n) (SS m) = sThenCmp SEQ (sCompare n m)
-  x %:< y = case sCompare x y of { SLT -> STrue ; SEQ -> SFalse ; SGT -> SFalse }
-  x %:> y = case sCompare x y of { SGT -> STrue ; SEQ -> SFalse ; SLT -> SFalse }
-  x %:<= y = case sCompare x y of { SLT -> STrue ; SEQ -> STrue ; SGT -> SFalse }
-  x %:>= y = case sCompare x y of { SGT -> STrue ; SEQ -> STrue ; SLT -> SFalse }
-  sMin x y = sIf (x %:<= y) x y
-  sMax x y = sIf (x %:<= y) y x
-#endif
-
-{-
-singletons [d|
- (+) :: Nat -> Nat -> Nat
- Z   + n = n
- S m + n = S (m + n)
-
- (-) :: Nat -> Nat -> Nat
- n   - Z   = n
- S n - S m = n - m
- Z   - S _ = Z
-
- (*) :: Nat -> Nat -> Nat
- Z   * _ = Z
- S n * m = n * m + m
- |]
+import Data.Constraint hiding ((:-))
+import Language.Haskell.TH.Quote
+import Unsafe.Coerce
+import Language.Haskell.TH
+import Data.Type.Natural.Definitions
 
 instance P.Num Nat where
   n - m = n - m
@@ -146,78 +117,9 @@ instance P.Num Nat where
   fromInteger n | n P.< 0   = error "negative integer"
                 | otherwise = S $ P.fromInteger (n P.- 1)
 
-infixl 6 :-:, %:-, -
-
-type n :-: m = n :- m
-infixl 6 :+:, %+, %:+, :+
-
-type n :+: m = n :+ m
-
--- | Addition for singleton numbers.
-(%+) :: SNat n -> SNat m -> SNat (n :+: m)
-(%+) = (%:+)
-
-infixl 7 :*:, %*, %:*, :*
-
--- | Type-level multiplication.
-type n :*: m = n :* m
-
--- | Multiplication for singleton numbers.
-(%*) :: SNat n -> SNat m -> SNat (n :*: m)
-(%*) = (%:*)
-
 --------------------------------------------------
 -- ** Convenient synonyms
 --------------------------------------------------
-singletons [d|
- zero, one, two, three, four, five, six, seven, eight, nine, ten :: Nat
- eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty :: Nat
- zero      = Z
- one       = S zero
- two       = S one
- three     = S two
- four      = S three
- five      = S four
- six       = S five
- seven     = S six
- eight     = S seven
- nine      = S eight
- ten       = S nine
- eleven    = S ten
- twelve    = S eleven
- thirteen  = S twelve
- fourteen  = S thirteen
- fifteen   = S fourteen
- sixteen   = S fifteen
- seventeen = S sixteen
- eighteen  = S seventeen
- nineteen  = S eighteen
- twenty    = S nineteen
- n0, n1, n2, n3, n4, n5, n6, n7, n8, n9 :: Nat
- n10, n11, n12, n13, n14, n15, n16, n17 :: Nat
- n18, n19, n20 :: Nat
- n0  = zero
- n1  = one
- n2  = two
- n3  = three
- n4  = four
- n5  = five
- n6  = six
- n7  = seven
- n8  = eight
- n9  = nine
- n10 = ten
- n11 = eleven
- n12 = twelve
- n13 = thirteen
- n14 = fourteen
- n15 = fifteen
- n16 = sixteen
- n17 = seventeen
- n18 = eighteen
- n19 = nineteen
- n20 = twenty
- |]
 
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
 sZ :: SNat Z
@@ -234,19 +136,9 @@ sS = SS
 -- ** Type-level predicate & judgements.
 --------------------------------------------------
 -- | Comparison via type-class.
-class (n :: Nat) :<<= (m :: Nat)
-instance Z :<<= n
-instance (n :<<= m) => S n :<<= S m
-
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 708
--- | Boolean-valued type-level comparison function.
-singletons [d|
- (<=) :: Nat -> Nat -> Bool
- Z   <= _   = True
- S _ <= Z   = False
- S n <= S m = n <= m
- |]
-#endif
+class (n :: Nat) :<<<= (m :: Nat)
+instance Z :<<<= n
+instance (n :<<<= m) => S n :<<<= S m
 
 -- | Comparison via GADTs.
 data Leq (n :: Nat) (m :: Nat) where
@@ -255,10 +147,6 @@ data Leq (n :: Nat) (m :: Nat) where
 
 type LeqTrueInstance a b = Dict ((a :<= b) ~ True)
 
-(%-) :: (n :<= m) ~ True => SNat n -> SNat m -> SNat (n :-: m)
-n   %- m    = n %:- m
-
-infixl 6 %-
 deriving instance Show (SNat n)
 deriving instance Eq (SNat n)
 
@@ -311,7 +199,7 @@ propToClassLeq (SuccLeqSucc leq) = case propToClassLeq leq of Dict -> Dict
  #-}
 -}
 
-type LeqInstance n m = Dict (n :<<= m)
+type LeqInstance n m = Dict (n :<<<= m)
 
 boolToPropLeq :: (n :<= m) ~ True => SNat n -> SNat m -> Leq n m
 boolToPropLeq SZ     m      = ZeroLeq m
@@ -709,4 +597,3 @@ snat = QuasiQuoter { quoteExp = P.foldr appE (conE 'SZ) . P.flip P.replicate (co
                    , quoteType = appT (conT ''SNat) . P.foldr appT (conT 'Z) . P.flip P.replicate (conT 'S) . P.read
                    , quoteDec = error "not implemented"
                    }
--}

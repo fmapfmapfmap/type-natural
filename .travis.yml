@@ -8,7 +8,7 @@ before_install:
   - travis_retry sudo apt-get update
   - travis_retry sudo apt-get install cabal-install-1.20 ghc-$GHCVER happy
   - export PATH=/opt/ghc/$GHCVER/bin:$PATH
-
+  - sudo ln -s `which cabal-1.20` /usr/bin/cabal
 install:
   - cabal-1.20 update
   - cabal-1.20 install --only-dependencies --enable-tests --enable-benchmarks -j2
@@ -29,8 +29,7 @@ script:
        echo "expected '$SRC_TGZ' not found";
        exit 1;
     fi
- 
 
 matrix:
   allow_failures:
-   - env: GHCVER=head
+    - env: GHCVER=head
