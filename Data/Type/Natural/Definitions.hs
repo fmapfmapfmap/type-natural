@@ -4,32 +4,82 @@
 {-# LANGUAGE TypeOperators, UndecidableInstances, StandaloneDeriving    #-}
 module Data.Type.Natural.Definitions where
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
-import Data.Singletons.TH      (singletons)
-import Data.Singletons.Prelude hiding ((:<=), SOrd(..), MaxSym1, MaxSym0, MaxSym2
-                                      , MinSym1, MinSym0, MinSym2, Max, Min)
+import           Data.Singletons.TH       (promote, singletons)
+import           Data.Singletons.Prelude
+import           Data.Singletons.Decide
+import qualified Data.Singletons.TypeLits as TL
+#else
+import           Data.Singletons
 #endif
-import           Data.Type.Monomorphic
-import           Prelude          (Int, Bool (..), Eq (..), Integral (..), Ord ((<)),
-                                   Show (..), error, id, otherwise, ($), (.), undefined)
-import qualified Prelude          as P
-import           Proof.Equational
-import Data.Constraint hiding ((:-))
-import Language.Haskell.TH.Quote
-import Unsafe.Coerce
-import Language.Haskell.TH
+import           Prelude
+import qualified Prelude                  as P
+import           Unsafe.Coerce
+import           Data.Promotion.TH        (promoteOrdInstances)
+import Proof.Equational ((:=:))
+import Proof.Equational (coerce)
+import Proof.Equational (coerce')
+import Data.Singletons.TH (cases)
 
 --------------------------------------------------
 -- * Natural numbers and its singleton type
 --------------------------------------------------
 singletons [d|
  data Nat = Z | S Nat
-            deriving (Show, Eq, Ord)
+            deriving (Show, Eq)
  |]
+
+deriving instance Show (SNat n)
+
+instance Eq (SNat n) where
+  _ == _ = True
+  _ /= _ = False
 
 --------------------------------------------------
 -- ** Arithmetic functions.
 --------------------------------------------------
 
+instance Ord Nat where
+  {-
+  compare Z Z = EQ
+  compare Z (S _) = LT
+  compare (S _) Z = GT
+  compare (S n) (S m) = compare n m
+-}
+  Z    <= _ = True
+  S _ <= Z = False
+  S n <= S m = n <= m
+
+-- | Boolean-valued type-level comparison function.
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+promoteOrdInstances [''Nat]
+
+succLeqEq :: SNat n -> SNat m -> (n :<= m) :=: (S n :<= S m)
+succLeqEq _ _ = unsafeCoerce (Refl :: () :=: ())
+-- The following is proof of the validness:
+{- 
+succLeqEq :: SNat n -> SNat m -> (n :<= m) :=: (S n :<= S m)
+succLeqEq n m =
+  case sCompare n m of
+    SLT -> Refl
+    SGT -> Refl
+    SEQ -> Refl
+-}
+
+instance SOrd ('KProxy :: KProxy Nat) where
+  sCompare SZ SZ = SEQ
+  sCompare SZ (SS _) = SLT
+  sCompare (SS _) SZ = SGT
+  sCompare (SS n) (SS m) = sCompare n m
+  SZ   %:<= SZ   = STrue
+  SZ   %:<= SS _ = STrue
+  SS _ %:<= SZ   = SFalse
+  SS n %:<= SS m = coerce (succLeqEq n m) $ n %:<= m 
+  n %:<  m = case sCompare n m of { SLT -> STrue ; SEQ -> SFalse ; SGT -> SFalse }
+  n %:>= m = case sCompare n m of { SLT -> SFalse ; SEQ -> STrue ; SGT -> STrue }
+  n %:>  m = case sCompare n m of { SLT -> SFalse ; SEQ -> SFalse ; SGT -> STrue }
+  sMin n m = unsafeCoerce $ sIf (n %:<= m) n m
+  sMax m n = unsafeCoerce $ sIf (n %:<= m) m n -- Why do I need these @unsafeCoerce@s?
+#else
 singletons [d|
  -- | Minimum function.
  min :: Nat -> Nat -> Nat
@@ -45,8 +95,59 @@ singletons [d|
  max (S n) Z     = S n
  max (S n) (S m) = S (max n m)
  |]
+#endif
 
-singletons [d|
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
+promote [d|
+ instance Num Nat where
+   Z   + n = n
+   S m + n = S (m + n)
+
+   n   - Z   = n
+   S n - S m = n - m
+   Z   - S _ = Z
+
+   Z   * _ = Z
+   S n * m = n * m + m
+
+   negate _ = error "natural cannot negate"
+   fromInteger 0 = Z
+   fromInteger n = S (P.fromInteger (n P.- 1))
+
+   abs n = n
+   signum Z = Z
+   signum _ = S Z
+ |]
+
+sfromint :: TL.SNat n -> SNat (FromInteger n)
+sfromint n =
+  case n %~ pzero of
+    Proved Refl -> SZ
+    Disproved _ -> unsafeCoerce $ SS $ sFromInteger (n %:- pone)
+  where
+    pone  = TL.SNat :: TL.SNat 1
+    pzero = TL.SNat :: TL.SNat 0
+
+instance SNum ('KProxy :: KProxy Nat) where
+   SZ   %:+ n = n
+   SS m %:+ n = SS (m %:+ n)
+
+   n    %:- SZ   = n
+   SS n %:- SS m = n %:- m
+   SZ   %:- SS _ = SZ
+
+   SZ   %:* _ = SZ
+   SS n %:* m = n %:* m %:+ m
+
+   sNegate _ = sError (TL.SSym :: TL.SSymbol "natural cannot negate")
+
+   sAbs n = n
+   sSignum SZ = SZ
+   sSignum (SS _) = SS SZ
+
+   sFromInteger = sfromint
+#else
+singletonsOnly [d|
  (+) :: Nat -> Nat -> Nat
  Z   + n = n
  S m + n = S (m + n)
@@ -60,11 +161,11 @@ singletons [d|
  Z   * _ = Z
  S n * m = n * m + m
  |]
-
-infixl 6 :-:, %:-, -
+#endif
+infixl 6 :-:
 
 type n :-: m = n :- m
-infixl 6 :+:, %+, %:+, :+
+infixl 6 :+:, %+
 
 type n :+: m = n :+ m
 
@@ -72,7 +173,7 @@ type n :+: m = n :+ m
 (%+) :: SNat n -> SNat m -> SNat (n :+: m)
 (%+) = (%:+)
 
-infixl 7 :*:, %*, %:*, :*
+infixl 7 :*:, %*
 
 -- | Type-level multiplication.
 type n :*: m = n :* m
@@ -131,10 +232,3 @@ singletons [d|
  n20 = twenty
  |]
 
--- | Boolean-valued type-level comparison function.
-singletons [d|
- (<<=) :: Nat -> Nat -> Bool
- Z   <<= _   = True
- S _ <<= Z   = False
- S n <<= S m = n <<= m
- |]
