@@ -5,6 +5,7 @@
 module Data.Type.Natural.Definitions where
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
 import           Data.Singletons.TH       (promote, singletons)
+import           Data.Promotion.TH        (promoteOrdInstances)
 import           Data.Singletons.Prelude
 import           Data.Singletons.Decide
 import qualified Data.Singletons.TypeLits as TL
@@ -14,7 +15,6 @@ import           Data.Singletons
 import           Prelude
 import qualified Prelude                  as P
 import           Unsafe.Coerce
-import           Data.Promotion.TH        (promoteOrdInstances)
 import Proof.Equational ((:=:))
 import Proof.Equational (coerce)
 import Proof.Equational (coerce')
