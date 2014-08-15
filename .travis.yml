@@ -9,18 +9,19 @@ before_install:
   - travis_retry sudo apt-get install cabal-install-1.20 ghc-$GHCVER happy
   - export PATH=/opt/ghc/$GHCVER/bin:$PATH
   - sudo ln -s `which cabal-1.20` /usr/bin/cabal
+
 install:
   - cabal-1.20 update
+  - git clone git@github.com:konn/singletons.git
+  - cd singletons; git checkout devel; cabal-1.20 install -j2; cd ../
   - cabal-1.20 install --only-dependencies --enable-tests --enable-benchmarks -j2
 
 script:
-  - cabal-1.20 configure --enable-tests --enable-benchmarks -v2  # -v2 provides useful information for debugging
-  - cabal-1.20 build   # this builds all libraries and executables (including tests/benchmarks)
+  - cabal-1.20 configure --enable-tests --enable-benchmarks -v2
+  - cabal-1.20 build
   - cabal-1.20 test
   - cabal-1.20 check
-  - cabal-1.20 sdist   # tests that a source-distribution can be generated
- 
-  # The following scriptlet checks that the resulting source distribution can be built & installed
+  - cabal-1.20 sdist
   - export SRC_TGZ=$(cabal-1.20 info . | awk '{print $2 ".tar.gz";exit}') ;
     cd dist/;
     if [ -f "$SRC_TGZ" ]; then
