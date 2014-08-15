@@ -13,8 +13,8 @@ before_install:
 install:
   - cabal-1.20 update
   - if [ $GHCVER != "7.6.3" ]; then
-      git clone https://github.com/konn/singletons.git;
-      cd singletons; git checkout devel; cabal-1.20 install -j2; cd ../;
+      git clone --branch=devel https://github.com/konn/singletons.git;
+      cd singletons; cabal-1.20 install -j2; cd ../;
     fi;
   - cabal-1.20 install --only-dependencies --enable-tests --enable-benchmarks -j2
 
