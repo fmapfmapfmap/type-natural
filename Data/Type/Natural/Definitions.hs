@@ -17,8 +17,6 @@ import qualified Prelude                  as P
 import           Unsafe.Coerce
 import Proof.Equational ((:=:))
 import Proof.Equational (coerce)
-import Proof.Equational (coerce')
-import Data.Singletons.TH (cases)
 
 --------------------------------------------------
 -- * Natural numbers and its singleton type
