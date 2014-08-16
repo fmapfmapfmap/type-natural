@@ -1,22 +1,23 @@
-{-# LANGUAGE CPP, DataKinds, FlexibleContexts, FlexibleInstances, GADTs #-}
-{-# LANGUAGE KindSignatures, MultiParamTypeClasses, NoImplicitPrelude   #-}
-{-# LANGUAGE PolyKinds, RankNTypes, TemplateHaskell, TypeFamilies, ScopedTypeVariables       #-}
-{-# LANGUAGE TypeOperators, UndecidableInstances, StandaloneDeriving    #-}
+{-# LANGUAGE CPP, DataKinds, FlexibleContexts, FlexibleInstances, GADTs     #-}
+{-# LANGUAGE KindSignatures, MultiParamTypeClasses, NoImplicitPrelude       #-}
+{-# LANGUAGE PolyKinds, RankNTypes, ScopedTypeVariables, StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell, TypeFamilies, TypeOperators                   #-}
+{-# LANGUAGE UndecidableInstances                                           #-}
 module Data.Type.Natural.Definitions where
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 708
-import           Data.Singletons.TH       (promote, singletons)
 import           Data.Promotion.TH        (promoteOrdInstances)
-import           Data.Singletons.Prelude
 import           Data.Singletons.Decide
+import           Data.Singletons.Prelude
+import           Data.Singletons.TH       (promote, singletons)
 import qualified Data.Singletons.TypeLits as TL
 #else
-import           Data.Singletons
+import Data.Singletons
 #endif
 import           Prelude
-import qualified Prelude                  as P
+import qualified Prelude          as P
+import           Proof.Equational ((:=:))
+import           Proof.Equational (coerce)
 import           Unsafe.Coerce
-import Proof.Equational ((:=:))
-import Proof.Equational (coerce)
 
 --------------------------------------------------
 -- * Natural numbers and its singleton type
@@ -54,7 +55,7 @@ promoteOrdInstances [''Nat]
 succLeqEq :: SNat n -> SNat m -> (n :<= m) :=: (S n :<= S m)
 succLeqEq _ _ = unsafeCoerce (Refl :: () :=: ())
 -- The following is proof of the validness:
-{- 
+{-
 succLeqEq :: SNat n -> SNat m -> (n :<= m) :=: (S n :<= S m)
 succLeqEq n m =
   case sCompare n m of
@@ -71,7 +72,7 @@ instance SOrd ('KProxy :: KProxy Nat) where
   SZ   %:<= SZ   = STrue
   SZ   %:<= SS _ = STrue
   SS _ %:<= SZ   = SFalse
-  SS n %:<= SS m = coerce (succLeqEq n m) $ n %:<= m 
+  SS n %:<= SS m = coerce (succLeqEq n m) $ n %:<= m
   n %:<  m = case sCompare n m of { SLT -> STrue ; SEQ -> SFalse ; SGT -> SFalse }
   n %:>= m = case sCompare n m of { SLT -> SFalse ; SEQ -> STrue ; SGT -> STrue }
   n %:>  m = case sCompare n m of { SLT -> SFalse ; SEQ -> SFalse ; SGT -> STrue }
@@ -123,8 +124,8 @@ sfromint n =
     Proved Refl -> SZ
     Disproved _ -> unsafeCoerce $ SS $ sFromInteger (n %:- pone)
   where
-    pone  = TL.SNat :: TL.SNat 1
-    pzero = TL.SNat :: TL.SNat 0
+    pone  = sing :: Sing 1
+    pzero = sing :: Sing 0
 
 instance SNum ('KProxy :: KProxy Nat) where
    SZ   %:+ n = n
@@ -137,7 +138,7 @@ instance SNum ('KProxy :: KProxy Nat) where
    SZ   %:* _ = SZ
    SS n %:* m = n %:* m %:+ m
 
-   sNegate _ = sError (TL.SSym :: TL.SSymbol "natural cannot negate")
+   sNegate _ = sError (sing :: Sing "natural cannot negate")
 
    sAbs n = n
    sSignum SZ = SZ
@@ -181,8 +182,8 @@ type n :*: m = n :* m
 (%*) = (%:*)
 
 singletons [d|
- zero, one, two, three, four, five, six, seven, eight, nine, ten :: Nat           
- eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty :: Nat           
+ zero, one, two, three, four, five, six, seven, eight, nine, ten :: Nat
+ eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty :: Nat
  zero      = Z
  one       = S zero
  two       = S one
